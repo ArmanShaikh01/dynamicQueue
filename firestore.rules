@@ -1,0 +1,161 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to get user data
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    // Helper function to check if user belongs to organization
+    function belongsToOrganization(orgId) {
+      return isAuthenticated() && getUserData().organizationId == orgId;
+    }
+    
+    // Helper function to check user role
+    function hasRole(role) {
+      return isAuthenticated() && getUserData().role == role;
+    }
+    
+    // ==================== USERS ====================
+    match /users/{userId} {
+      // Users can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Users can update their own profile
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Only authenticated users can create their profile (signup)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // Org admins can read users in their organization
+      allow read: if isAuthenticated() && 
+                     resource.data.organizationId == getUserData().organizationId;
+    }
+    
+    // ==================== ORGANIZATIONS ====================
+    match /organizations/{orgId} {
+      // Anyone authenticated can read organizations (for search)
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can create organizations
+      allow create: if isAuthenticated();
+      
+      // Only org admin of this organization can update
+      allow update: if belongsToOrganization(orgId) && hasRole('ORG_ADMIN');
+      
+      // Platform admins can read/update all organizations
+      allow read, update: if hasRole('PLATFORM_ADMIN');
+    }
+    
+    // ==================== SERVICES ====================
+    match /services/{serviceId} {
+      // Anyone authenticated can read services (for booking)
+      allow read: if isAuthenticated();
+      
+      // Org admin can create services for their organization
+      allow create: if isAuthenticated() && 
+                      request.resource.data.organizationId == getUserData().organizationId &&
+                      hasRole('ORG_ADMIN');
+      
+      // Org admin can update/delete their organization's services
+      allow update, delete: if isAuthenticated() && 
+                              resource.data.organizationId == getUserData().organizationId &&
+                              hasRole('ORG_ADMIN');
+    }
+    
+    // ==================== APPOINTMENTS ====================
+    match /appointments/{appointmentId} {
+      // Customers can read their own appointments
+      allow read: if isAuthenticated() && 
+                     resource.data.customerId == request.auth.uid;
+      
+      // Employees and org admins can read appointments for their organization
+      allow read: if isAuthenticated() && 
+                     resource.data.organizationId == getUserData().organizationId &&
+                     (hasRole('EMPLOYEE') || hasRole('ORG_ADMIN'));
+      
+      // Customers can create appointments for themselves
+      allow create: if isAuthenticated() && 
+                      request.resource.data.customerId == request.auth.uid;
+      
+      // Customers can update/cancel their own appointments
+      allow update: if isAuthenticated() && 
+                      resource.data.customerId == request.auth.uid;
+      
+      // Employees can update appointments (check-in, status changes)
+      allow update: if isAuthenticated() && 
+                      resource.data.organizationId == getUserData().organizationId &&
+                      (hasRole('EMPLOYEE') || hasRole('ORG_ADMIN'));
+      
+      // Only customers can delete their own appointments
+      allow delete: if isAuthenticated() && 
+                      resource.data.customerId == request.auth.uid;
+    }
+    
+    // ==================== QUEUES ====================
+    match /queues/{queueId} {
+      // Employees and org admins can read queues for their organization
+      allow read: if isAuthenticated() && 
+                     resource.data.organizationId == getUserData().organizationId &&
+                     (hasRole('EMPLOYEE') || hasRole('ORG_ADMIN'));
+      
+      // Employees can create/update queues for their organization
+      allow create, update: if isAuthenticated() && 
+                              request.resource.data.organizationId == getUserData().organizationId &&
+                              (hasRole('EMPLOYEE') || hasRole('ORG_ADMIN'));
+      
+      // Customers can read queues to see their position
+      allow read: if isAuthenticated();
+    }
+    
+    // ==================== INVITATIONS ====================
+    match /invitations/{invitationId} {
+      // Anyone can read invitations by code (for signup)
+      allow read: if isAuthenticated();
+      
+      // Org admins can create invitations for their organization
+      allow create: if isAuthenticated() && 
+                      request.resource.data.organizationId == getUserData().organizationId &&
+                      hasRole('ORG_ADMIN');
+      
+      // Org admins can update/delete their organization's invitations
+      allow update, delete: if isAuthenticated() && 
+                              resource.data.organizationId == getUserData().organizationId &&
+                              hasRole('ORG_ADMIN');
+    }
+    
+    // ==================== NOTIFICATIONS ====================
+    match /notifications/{notificationId} {
+      // Users can read their own notifications
+      allow read: if isAuthenticated() && 
+                     resource.data.userId == request.auth.uid;
+      
+      // System can create notifications
+      allow create: if isAuthenticated();
+      
+      // Users can update their own notifications (mark as read)
+      allow update: if isAuthenticated() && 
+                      resource.data.userId == request.auth.uid;
+    }
+    
+    // ==================== ANALYTICS ====================
+    match /analytics/{analyticsId} {
+      // Org admins can read analytics for their organization
+      allow read: if isAuthenticated() && 
+                     resource.data.organizationId == getUserData().organizationId &&
+                     hasRole('ORG_ADMIN');
+      
+      // Platform admins can read all analytics
+      allow read: if hasRole('PLATFORM_ADMIN');
+      
+      // System can create/update analytics
+      allow create, update: if isAuthenticated();
+    }
+  }
+}
