@@ -164,9 +164,11 @@ export const markCompleted = async (queueId, appointmentId) => {
 /**
  * Mark as no-show
  */
+/**
+ * Mark as no-show
+ */
 export const markNoShow = async (queueId, appointmentId) => {
     try {
-        // Fetch appointment to get customerId
         const appointmentDoc = await getDoc(doc(db, 'appointments', appointmentId));
         if (!appointmentDoc.exists()) {
             return { success: false, error: 'Appointment not found' };
@@ -177,21 +179,30 @@ export const markNoShow = async (queueId, appointmentId) => {
         const queueDoc = await getDoc(doc(db, 'queues', queueId));
         const queueData = queueDoc.data();
 
-        // Move customer to end of queue instead of removing
-        const updatedActiveTokens = queueData.activeTokens.filter(id => id !== appointmentId);
-        updatedActiveTokens.push(appointmentId); // Add to end
+        // Remove from active tokens if it's there
+        let updatedActiveTokens = queueData.activeTokens.filter(id => id !== appointmentId);
+
+        // If it was the current token, clear it
+        let updatedCurrentToken = queueData.currentToken;
+        if (updatedCurrentToken === appointmentId) {
+            updatedCurrentToken = null;
+        }
+
+        // Add to end of queue for second chance
+        updatedActiveTokens.push(appointmentId);
 
         await updateDoc(doc(db, 'queues', queueId), {
-            currentToken: null, // Clear current token
+            currentToken: updatedCurrentToken,
             activeTokens: updatedActiveTokens,
-            noShowTokens: [...queueData.noShowTokens, appointmentId],
+            noShowTokens: [...(queueData.noShowTokens || []), appointmentId],
             updatedAt: serverTimestamp()
         });
 
         // Update appointment status to CHECKED_IN (giving second chance)
         await updateDoc(doc(db, 'appointments', appointmentId), {
             status: 'CHECKED_IN',
-            queuePosition: updatedActiveTokens.length // Last position
+            queuePosition: updatedActiveTokens.length,
+            noShowAt: serverTimestamp()
         });
 
         // Update positions for all tokens
@@ -211,6 +222,80 @@ export const markNoShow = async (queueId, appointmentId) => {
         return { success: true };
     } catch (error) {
         console.error('Error marking no-show:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+/**
+ * Prioritize a token in the queue
+ */
+export const prioritizeInQueue = async (queueId, appointmentId) => {
+    try {
+        const queueDoc = await getDoc(doc(db, 'queues', queueId));
+        const queueData = queueDoc.data();
+
+        // Remove from current position and move to front
+        const remainingTokens = queueData.activeTokens.filter(id => id !== appointmentId);
+        const updatedActiveTokens = [appointmentId, ...remainingTokens];
+
+        await updateDoc(doc(db, 'queues', queueId), {
+            activeTokens: updatedActiveTokens,
+            updatedAt: serverTimestamp()
+        });
+
+        // Update appointment status and flags
+        await updateDoc(doc(db, 'appointments', appointmentId), {
+            prioritized: true,
+            prioritizedAt: serverTimestamp()
+        });
+
+        // Update positions for all tokens
+        await updateQueuePositions(queueId, updatedActiveTokens);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error prioritizing token:', error);
+        return { success: false, error: error.message };
+    }
+};
+
+/**
+ * Skip/Cancel a token from the queue
+ */
+export const skipFromQueue = async (queueId, appointmentId, reason = 'Skipped by admin') => {
+    try {
+        const queueDoc = await getDoc(doc(db, 'queues', queueId));
+        const queueData = queueDoc.data();
+
+        // Remove from active tokens
+        const updatedActiveTokens = queueData.activeTokens.filter(id => id !== appointmentId);
+
+        // If it was the current token, clear it
+        let updatedCurrentToken = queueData.currentToken;
+        if (updatedCurrentToken === appointmentId) {
+            updatedCurrentToken = null;
+        }
+
+        await updateDoc(doc(db, 'queues', queueId), {
+            currentToken: updatedCurrentToken,
+            activeTokens: updatedActiveTokens,
+            updatedAt: serverTimestamp()
+        });
+
+        // Update appointment status to CANCELLED
+        await updateDoc(doc(db, 'appointments', appointmentId), {
+            status: 'CANCELLED',
+            cancelledAt: serverTimestamp(),
+            cancellationReason: reason,
+            queuePosition: null
+        });
+
+        // Update positions for remaining tokens
+        await updateQueuePositions(queueId, updatedActiveTokens);
+
+        return { success: true };
+    } catch (error) {
+        console.error('Error skipping token:', error);
         return { success: false, error: error.message };
     }
 };

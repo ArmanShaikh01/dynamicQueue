@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { collection, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import AdvancedTable from '../../components/admin/AdvancedTable';
@@ -12,6 +12,7 @@ const NoShowManagement = () => {
     const [noShowAppointments, setNoShowAppointments] = useState([]);
     const [repeatOffenders, setRepeatOffenders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
     const [settings, setSettings] = useState({
         noShowTimeout: 15,
         autoNoShow: true,
@@ -20,8 +21,28 @@ const NoShowManagement = () => {
 
     useEffect(() => {
         if (!userProfile?.organizationId) return;
-        loadNoShowData();
+        loadData();
     }, [userProfile?.organizationId]);
+
+    const loadData = async () => {
+        setLoading(true);
+        await Promise.all([
+            loadNoShowData(),
+            loadSettings()
+        ]);
+        setLoading(false);
+    };
+
+    const loadSettings = async () => {
+        try {
+            const orgDoc = await getDoc(doc(db, 'organizations', userProfile.organizationId));
+            if (orgDoc.exists() && orgDoc.data().noShowSettings) {
+                setSettings(orgDoc.data().noShowSettings);
+            }
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+    };
 
     const loadNoShowData = async () => {
         try {
@@ -63,11 +84,9 @@ const NoShowManagement = () => {
                 .sort((a, b) => b.count - a.count);
 
             setRepeatOffenders(offenders);
-            setLoading(false);
         } catch (error) {
             console.error('Error loading no-show data:', error);
             toast.error('Failed to load no-show data');
-            setLoading(false);
         }
     };
 
@@ -84,7 +103,7 @@ const NoShowManagement = () => {
             });
 
             toast.success('No-show reverted');
-            loadNoShowData();
+            loadData();
         } catch (error) {
             console.error('Error reverting no-show:', error);
             toast.error('Failed to revert no-show');
@@ -103,7 +122,7 @@ const NoShowManagement = () => {
             });
 
             toast.success('Customer blocked successfully');
-            loadNoShowData();
+            loadData();
         } catch (error) {
             console.error('Error blocking customer:', error);
             toast.error('Failed to block customer');
@@ -113,6 +132,22 @@ const NoShowManagement = () => {
     const handleWarnCustomer = async (customerId, customerName) => {
         toast.success(`Warning sent to ${customerName}`);
         // In a real implementation, this would send an email/notification
+    };
+
+    const handleSaveSettings = async () => {
+        setSaving(true);
+        try {
+            await updateDoc(doc(db, 'organizations', userProfile.organizationId), {
+                noShowSettings: settings,
+                updatedAt: serverTimestamp()
+            });
+            toast.success('Settings saved successfully');
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            toast.error('Failed to save settings');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const noShowColumns = [
@@ -237,8 +272,13 @@ const NoShowManagement = () => {
                         </div>
                     </div>
 
-                    <button className="btn-primary" style={{ marginTop: 'var(--spacing-md)' }}>
-                        Save Settings
+                    <button
+                        className="btn-primary"
+                        style={{ marginTop: 'var(--spacing-md)' }}
+                        onClick={handleSaveSettings}
+                        disabled={saving}
+                    >
+                        {saving ? 'Saving...' : 'Save Settings'}
                     </button>
                 </div>
 

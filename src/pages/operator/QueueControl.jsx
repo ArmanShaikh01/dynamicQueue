@@ -11,6 +11,7 @@ const QueueControl = () => {
     const [services, setServices] = useState({});
     const [selectedQueue, setSelectedQueue] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [appointmentMap, setAppointmentMap] = useState({});
 
     useEffect(() => {
         if (!userProfile?.organizationId) return;
@@ -55,6 +56,35 @@ const QueueControl = () => {
             console.error('Error fetching services:', error);
         }
     };
+
+    useEffect(() => {
+        if (queues.length === 0) return;
+
+        // Fetch appointment details for all tokens in all queues
+        const allTokenIds = new Set();
+        queues.forEach(q => {
+            if (q.currentToken) allTokenIds.add(q.currentToken);
+            q.activeTokens.forEach(id => allTokenIds.add(id));
+        });
+
+        if (allTokenIds.size === 0) return;
+
+        // Listen to relevant appointments
+        const appointmentQuery = query(
+            collection(db, 'appointments'),
+            where('__name__', 'in', Array.from(allTokenIds).slice(0, 10))
+        );
+
+        const unsubscribe = onSnapshot(appointmentQuery, (snapshot) => {
+            const newMap = { ...appointmentMap };
+            snapshot.docs.forEach(doc => {
+                newMap[doc.id] = doc.data();
+            });
+            setAppointmentMap(newMap);
+        });
+
+        return () => unsubscribe();
+    }, [queues]);
 
     const handleCallNext = async (queueId) => {
         const result = await callNextToken(queueId);
@@ -131,12 +161,17 @@ const QueueControl = () => {
                                         marginBottom: '1rem'
                                     }}>
                                         <h4>Currently Serving</h4>
-                                        <p>Token: {queue.currentToken}</p>
-                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                        <div style={{ fontSize: '1.5rem', fontWeight: '700' }}>
+                                            Token #{appointmentMap[queue.currentToken]?.tokenNumber || '...'}
+                                        </div>
+                                        <p style={{ margin: '0.25rem 0' }}>
+                                            👤 {appointmentMap[queue.currentToken]?.customerName || 'Loading...'}
+                                        </p>
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', flexWrap: 'wrap' }}>
                                             <button
                                                 className="btn-primary touch-target"
                                                 onClick={() => handleMarkCompleted(queue.id, queue.currentToken)}
-                                                style={{ flex: '1', minWidth: '120px' }}
+                                                style={{ flex: '1', minWidth: '120px', background: 'rgba(255,255,255,0.2)', border: '1px solid white' }}
                                             >
                                                 Mark Completed
                                             </button>
@@ -163,20 +198,27 @@ const QueueControl = () => {
                                 {queue.activeTokens.length > 0 && (
                                     <>
                                         <h4>Waiting Queue ({queue.activeTokens.length})</h4>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            {queue.activeTokens.slice(0, 5).map((token, index) => (
+                                        <div style={{ display: 'grid', gap: '0.5rem' }}>
+                                            {queue.activeTokens.slice(0, 5).map((tokenId, index) => (
                                                 <div
-                                                    key={token}
+                                                    key={tokenId}
                                                     style={{
                                                         padding: '0.75rem',
                                                         background: 'var(--bg-tertiary)',
                                                         borderRadius: 'var(--radius-md)',
                                                         display: 'flex',
                                                         justifyContent: 'space-between',
-                                                        alignItems: 'center'
+                                                        alignItems: 'center',
+                                                        borderLeft: appointmentMap[tokenId]?.prioritized ? '4px solid var(--warning)' : 'none'
                                                     }}
                                                 >
-                                                    <span>#{index + 1} - Token: {token.slice(-6)}</span>
+                                                    <div>
+                                                        <span style={{ fontWeight: '700' }}>#{appointmentMap[tokenId]?.tokenNumber || '?'}</span>
+                                                        <span style={{ marginLeft: '1rem' }}>{appointmentMap[tokenId]?.customerName || '...'}</span>
+                                                    </div>
+                                                    {appointmentMap[tokenId]?.prioritized && (
+                                                        <span className="badge badge-warning" style={{ fontSize: '0.7rem' }}>⚡ Priority</span>
+                                                    )}
                                                 </div>
                                             ))}
                                             {queue.activeTokens.length > 5 && (

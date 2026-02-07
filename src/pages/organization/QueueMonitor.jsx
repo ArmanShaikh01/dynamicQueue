@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { collection, query, where, onSnapshot, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import { PERMISSION_CODES } from '../../models/permissions';
@@ -65,8 +65,12 @@ const QueueMonitor = () => {
                     ...doc.data()
                 }));
 
-                // Sort by token number
-                appointmentsData.sort((a, b) => (a.tokenNumber || 0) - (b.tokenNumber || 0));
+                // Sort by queue position (0 or null means currently serving or not in queue)
+                appointmentsData.sort((a, b) => {
+                    const posA = a.queuePosition || 999999;
+                    const posB = b.queuePosition || 999999;
+                    return posA - posB;
+                });
 
                 setAppointments(appointmentsData);
 
@@ -82,6 +86,17 @@ const QueueMonitor = () => {
         return () => unsubscribe();
     }, [selectedService]);
 
+    const getQueueId = async () => {
+        const today = new Date().toISOString().split('T')[0];
+        const q = query(
+            collection(db, 'queues'),
+            where('serviceId', '==', selectedService),
+            where('date', '==', today)
+        );
+        const snapshot = await getDocs(q);
+        return snapshot.empty ? null : snapshot.docs[0].id;
+    };
+
     const handleSkipTokenClick = (appointmentId) => {
         setConfirmDialog({
             isOpen: true,
@@ -94,13 +109,17 @@ const QueueMonitor = () => {
 
     const handleSkipToken = async (appointmentId) => {
         try {
-            await updateDoc(doc(db, 'appointments', appointmentId), {
-                status: 'CANCELLED',
-                cancelledAt: new Date(),
-                cancelledBy: userProfile.uid,
-                cancellationReason: 'Skipped by admin'
-            });
-            toast.success('Token skipped successfully');
+            const queueId = await getQueueId();
+            if (!queueId) {
+                toast.error('Queue not found for this service');
+                return;
+            }
+            const result = await skipFromQueue(queueId, appointmentId);
+            if (result.success) {
+                toast.success('Token skipped successfully');
+            } else {
+                toast.error(result.error);
+            }
         } catch (error) {
             console.error('Error skipping token:', error);
             toast.error('Failed to skip token');
@@ -109,14 +128,17 @@ const QueueMonitor = () => {
 
     const handlePrioritize = async (appointmentId) => {
         try {
-            // Set token number to 0 to move to front
-            await updateDoc(doc(db, 'appointments', appointmentId), {
-                tokenNumber: 0,
-                prioritized: true,
-                prioritizedAt: new Date(),
-                prioritizedBy: userProfile.uid
-            });
-            toast.success('Token prioritized successfully');
+            const queueId = await getQueueId();
+            if (!queueId) {
+                toast.error('Queue not found for this service');
+                return;
+            }
+            const result = await prioritizeInQueue(queueId, appointmentId);
+            if (result.success) {
+                toast.success('Token prioritized successfully');
+            } else {
+                toast.error(result.error);
+            }
         } catch (error) {
             console.error('Error prioritizing token:', error);
             toast.error('Failed to prioritize token');
@@ -135,12 +157,17 @@ const QueueMonitor = () => {
 
     const handleMarkNoShow = async (appointmentId) => {
         try {
-            await updateDoc(doc(db, 'appointments', appointmentId), {
-                status: 'NO_SHOW',
-                noShowAt: new Date(),
-                markedBy: userProfile.uid
-            });
-            toast.success('Marked as no-show');
+            const queueId = await getQueueId();
+            if (!queueId) {
+                toast.error('Queue not found for this service');
+                return;
+            }
+            const result = await markNoShow(queueId, appointmentId);
+            if (result.success) {
+                toast.success('Marked as no-show');
+            } else {
+                toast.error(result.error);
+            }
         } catch (error) {
             console.error('Error marking no-show:', error);
             toast.error('Failed to mark as no-show');
