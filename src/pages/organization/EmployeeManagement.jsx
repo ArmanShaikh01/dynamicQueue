@@ -157,7 +157,6 @@ const EmployeeManagement = () => {
             });
             setShowForm(false);
             setEditingEmployee(null);
-            fetchEmployees();
         } catch (error) {
             console.error('Error saving employee:', error);
             if (error.code === 'auth/email-already-in-use') {
@@ -188,7 +187,6 @@ const EmployeeManagement = () => {
                 updatedAt: serverTimestamp()
             });
             toast.success('Employee status updated');
-            fetchEmployees();
         } catch (error) {
             console.error('Error updating employee:', error);
             toast.error('Failed to update employee');
