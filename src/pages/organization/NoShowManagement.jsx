@@ -223,64 +223,6 @@ const NoShowManagement = () => {
                 <h1 className="gradient-text">❌ No-Show Management</h1>
                 <p>Manage no-show appointments and repeat offenders</p>
 
-                {/* Settings */}
-                <div className="card-glass" style={{ marginBottom: '2rem' }}>
-                    <h2>No-Show Settings</h2>
-                    <div className="grid grid-cols-1 grid-md-3">
-                        <div className="form-group">
-                            <label>No-Show Timeout (minutes)</label>
-                            <input
-                                type="number"
-                                value={settings.noShowTimeout}
-                                onChange={(e) => setSettings({ ...settings, noShowTimeout: parseInt(e.target.value) })}
-                                min="5"
-                                max="60"
-                            />
-                            <small style={{ color: 'var(--text-secondary)' }}>
-                                Auto-mark as no-show after this time
-                            </small>
-                        </div>
-
-                        <div className="form-group">
-                            <label>Block Threshold</label>
-                            <input
-                                type="number"
-                                value={settings.blockThreshold}
-                                onChange={(e) => setSettings({ ...settings, blockThreshold: parseInt(e.target.value) })}
-                                min="2"
-                                max="10"
-                            />
-                            <small style={{ color: 'var(--text-secondary)' }}>
-                                No-shows before suggesting block
-                            </small>
-                        </div>
-
-                        <div className="form-group">
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)', cursor: 'pointer' }}>
-                                <input
-                                    type="checkbox"
-                                    checked={settings.autoNoShow}
-                                    onChange={(e) => setSettings({ ...settings, autoNoShow: e.target.checked })}
-                                />
-                                <div>
-                                    <div style={{ fontWeight: '600' }}>Auto No-Show</div>
-                                    <small style={{ color: 'var(--text-secondary)' }}>
-                                        Automatically mark after timeout
-                                    </small>
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    <button
-                        className="btn-primary"
-                        style={{ marginTop: 'var(--spacing-md)' }}
-                        onClick={handleSaveSettings}
-                        disabled={saving}
-                    >
-                        {saving ? 'Saving...' : 'Save Settings'}
-                    </button>
-                </div>
 
                 {/* Statistics */}
                 <div style={{

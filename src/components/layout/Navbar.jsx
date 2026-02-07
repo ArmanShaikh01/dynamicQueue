@@ -24,9 +24,9 @@ const Navbar = () => {
         switch (userProfile.role) {
             case 'PLATFORM_ADMIN':
                 return [
+                    { to: '/admin/platform', label: '🎯 Platform Admin' },
                     { to: '/admin/dashboard', label: '🏠 Dashboard' },
                     { to: '/admin/users', label: '👥 Users' },
-                    { to: '/admin/roles', label: '🔐 Roles' },
                     { to: '/admin/settings', label: '⚙️ Settings' },
                     { to: '/admin/audit-logs', label: '📋 Audit Logs' }
                 ];
@@ -34,11 +34,12 @@ const Navbar = () => {
             case 'ORG_ADMIN':
                 return [
                     { to: '/organization/dashboard', label: '🏠 Dashboard' },
-                    { to: '/organization/services', label: '�️ Services' },
+                    { to: '/organization/services', label: '️ Services' },
                     { to: '/organization/employees', label: '👥 Employees' },
                     { to: '/organization/queue-monitor', label: '📺 Live Queue' },
                     { to: '/organization/no-show', label: '❌ No-Shows' },
-                    { to: '/organization/analytics', label: '📊 Analytics' }
+                    { to: '/org-admin/analytics', label: '📊 Analytics' },
+                    { to: '/org-admin/audit-logs', label: '📋 Audit Logs' }
                 ];
 
             case 'EMPLOYEE':

@@ -301,9 +301,9 @@ const OrganizationDashboard = () => {
                                             </div>
                                         </div>
                                         <span className={`badge badge-${appointment.status === 'COMPLETED' ? 'success' :
-                                                appointment.status === 'IN_PROGRESS' ? 'primary' :
-                                                    appointment.status === 'NO_SHOW' ? 'danger' :
-                                                        'warning'
+                                            appointment.status === 'IN_PROGRESS' ? 'primary' :
+                                                appointment.status === 'NO_SHOW' ? 'danger' :
+                                                    'warning'
                                             }`}>
                                             {appointment.status}
                                         </span>

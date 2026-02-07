@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../config/firebase';
 import toast from 'react-hot-toast';
 import { validateEmail, validatePassword } from '../../utils/validation';
 import { getFirebaseErrorMessage } from '../../utils/firebaseErrorMapper';
@@ -12,6 +14,9 @@ const Login = () => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetLoading, setResetLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -97,6 +102,29 @@ const Login = () => {
         }
     };
 
+    const handleForgotPassword = async () => {
+        // Validate email
+        const emailError = validateEmail(resetEmail);
+        if (emailError) {
+            toast.error(emailError);
+            return;
+        }
+
+        setResetLoading(true);
+        try {
+            await sendPasswordResetEmail(auth, resetEmail.trim());
+            toast.success('Password reset email sent! Check your inbox.');
+            setShowForgotPassword(false);
+            setResetEmail('');
+        } catch (error) {
+            console.error('Error sending reset email:', error);
+            const errorMessage = getFirebaseErrorMessage(error);
+            toast.error(errorMessage);
+        } finally {
+            setResetLoading(false);
+        }
+    };
+
     return (
         <div className="auth-container">
             <div className="auth-card">
@@ -137,6 +165,24 @@ const Login = () => {
                     <button type="submit" className="btn-primary" disabled={loading}>
                         {loading ? 'Signing in...' : 'Sign In'}
                     </button>
+
+                    {/* Forgot Password Link */}
+                    <div style={{ textAlign: 'center', marginTop: 'var(--spacing-md)' }}>
+                        <button
+                            type="button"
+                            onClick={() => setShowForgotPassword(true)}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                color: 'var(--primary)',
+                                cursor: 'pointer',
+                                fontSize: '0.9rem',
+                                textDecoration: 'underline'
+                            }}
+                        >
+                            Forgot Password?
+                        </button>
+                    </div>
                 </form>
 
                 <div className="auth-footer">
@@ -145,6 +191,55 @@ const Login = () => {
                     </p>
                 </div>
             </div>
+
+            {/* Forgot Password Modal */}
+            {showForgotPassword && (
+                <div className="modal-overlay" onClick={() => setShowForgotPassword(false)}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <h2>Reset Password</h2>
+                            <button
+                                className="modal-close"
+                                onClick={() => setShowForgotPassword(false)}
+                            >
+                                ×
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p style={{ marginBottom: 'var(--spacing-md)', color: 'var(--text-secondary)' }}>
+                                Enter your email address and we'll send you a link to reset your password.
+                            </p>
+                            <div className="form-group">
+                                <label htmlFor="reset-email">Email Address</label>
+                                <input
+                                    type="email"
+                                    id="reset-email"
+                                    value={resetEmail}
+                                    onChange={(e) => setResetEmail(e.target.value)}
+                                    placeholder="Enter your email"
+                                    autoFocus
+                                />
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button
+                                className="btn-secondary"
+                                onClick={() => setShowForgotPassword(false)}
+                                disabled={resetLoading}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn-primary"
+                                onClick={handleForgotPassword}
+                                disabled={resetLoading}
+                            >
+                                {resetLoading ? 'Sending...' : 'Send Reset Link'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, updateDoc, doc, orderBy, limit } fro
 import { db, auth } from '../../config/firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 import AdvancedTable from '../../components/admin/AdvancedTable';
 import { PERMISSION_CODES, DEFAULT_ROLES } from '../../models/permissions';
 import PermissionGuard from '../../components/admin/PermissionGuard';
@@ -35,10 +36,8 @@ const UserManagement = () => {
                 ...doc.data()
             }));
 
-            // Filter only ORG_ADMIN and EMPLOYEE
-            const filteredUsers = usersData.filter(user =>
-                user.role === 'ORG_ADMIN' || user.role === 'EMPLOYEE'
-            );
+            // Show all users (no filtering by role)
+            const filteredUsers = usersData;
 
             // Fetch organization names for users with organizationId
             const orgIds = [...new Set(filteredUsers.map(u => u.organizationId).filter(Boolean))];
@@ -59,6 +58,22 @@ const UserManagement = () => {
                 organizationName: user.organizationId ? orgNames[user.organizationId] : 'N/A'
             }));
 
+            // Debug: Log all unique roles found
+            const uniqueRoles = [...new Set(usersWithOrgNames.map(u => u.role))];
+            console.log('📊 All users loaded:', usersWithOrgNames.length);
+            console.log('📋 Unique roles found:', uniqueRoles);
+            console.log('👥 Users by role:', {
+                PLATFORM_ADMIN: usersWithOrgNames.filter(u => u.role === 'PLATFORM_ADMIN').length,
+                ORG_ADMIN: usersWithOrgNames.filter(u => u.role === 'ORG_ADMIN').length,
+                EMPLOYEE: usersWithOrgNames.filter(u => u.role === 'EMPLOYEE').length,
+                CUSTOMER: usersWithOrgNames.filter(u => u.role === 'CUSTOMER').length,
+            });
+            console.log('🕐 Sample lastLogin data:', usersWithOrgNames.slice(0, 3).map(u => ({
+                name: u.name,
+                lastLogin: u.lastLogin,
+                lastLoginType: typeof u.lastLogin
+            })));
+
             setUsers(usersWithOrgNames);
             setLoading(false);
         } catch (error) {
@@ -70,11 +85,14 @@ const UserManagement = () => {
 
     const loadUserLogs = async (userId) => {
         try {
+            console.log('🔍 Loading logs for userId:', userId);
+
+            // Query for ALL activities by this user (using userId field which stores who performed the action)
             const logsQuery = query(
                 collection(db, 'auditLogs'),
                 where('userId', '==', userId),
                 orderBy('timestamp', 'desc'),
-                limit(50)
+                limit(100)
             );
 
             const snapshot = await getDocs(logsQuery);
@@ -83,9 +101,45 @@ const UserManagement = () => {
                 ...doc.data()
             }));
 
+            console.log('📋 Logs found:', logs.length);
+            console.log('📄 Sample log:', logs[0]);
+
             setUserLogs(logs);
         } catch (error) {
-            console.error('Error loading user logs:', error);
+            console.error('❌ Error loading user logs:', error);
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+
+            // If composite index error, try without orderBy
+            if (error.code === 'failed-precondition') {
+                console.log('⚠️ Trying query without orderBy...');
+                try {
+                    const simpleQuery = query(
+                        collection(db, 'auditLogs'),
+                        where('userId', '==', userId),
+                        limit(100)
+                    );
+                    const snapshot = await getDocs(simpleQuery);
+                    const logs = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+
+                    // Sort manually by timestamp
+                    logs.sort((a, b) => {
+                        const timeA = a.timestamp?.toMillis?.() || 0;
+                        const timeB = b.timestamp?.toMillis?.() || 0;
+                        return timeB - timeA;
+                    });
+
+                    console.log('📋 Logs found (simple query):', logs.length);
+                    setUserLogs(logs);
+                    return;
+                } catch (simpleError) {
+                    console.error('❌ Simple query also failed:', simpleError);
+                }
+            }
+
             toast.error('Failed to load user logs');
         }
     };
@@ -96,28 +150,58 @@ const UserManagement = () => {
         setShowLogsModal(true);
     };
 
+
     const handlePasswordReset = async (user) => {
         if (!user.email) {
-            toast.error('User email not found');
+            toast.error('❌ User email not found');
             return;
         }
 
-        if (!confirm(`Send password reset email to ${user.email}?`)) return;
+        console.log('Attempting to send password reset to:', user.email);
+
+        if (!confirm(`Send password reset email to ${user.email}?\n\nThe user will receive an email with a link to reset their password.`)) return;
+
+        const loadingToast = toast.loading('Sending password reset email...');
 
         try {
             await sendPasswordResetEmail(auth, user.email);
 
             // Log the action
-            await logUserAction(user.id, 'PASSWORD_RESET_SENT', {
+            await logUserAction(user.id, 'PASSWORD_RESET_EMAIL_SENT', {
                 uid: userProfile.uid,
                 name: userProfile.name,
-                role: userProfile.role
+                role: userProfile.role,
+                targetEmail: user.email
             });
 
-            toast.success(`Password reset email sent to ${user.email}`);
+            toast.dismiss(loadingToast);
+            toast.success(
+                `✅ Password reset email sent successfully!\n\n` +
+                `Email: ${user.email}\n\n` +
+                `⚠️ Note: Check spam folder if not received in 5 minutes.`,
+                { duration: 6000 }
+            );
+
+            console.log('Password reset email sent successfully to:', user.email);
         } catch (error) {
+            toast.dismiss(loadingToast);
             console.error('Error sending password reset:', error);
-            toast.error('Failed to send password reset email');
+            console.error('Error code:', error.code);
+            console.error('Error message:', error.message);
+
+            let errorMessage = 'Failed to send password reset email';
+
+            if (error.code === 'auth/user-not-found') {
+                errorMessage = `❌ User not found in Firebase Authentication.\n\nEmail: ${user.email}\n\n⚠️ This user may not have been created in Firebase Auth.`;
+            } else if (error.code === 'auth/invalid-email') {
+                errorMessage = `❌ Invalid email address: ${user.email}`;
+            } else if (error.code === 'auth/too-many-requests') {
+                errorMessage = '❌ Too many requests. Please try again later.';
+            } else {
+                errorMessage = `❌ Error: ${error.message}`;
+            }
+
+            toast.error(errorMessage, { duration: 6000 });
         }
     };
 
@@ -178,6 +262,29 @@ const UserManagement = () => {
             console.error('Error changing role:', error);
             toast.error('Failed to change role');
         }
+    };
+
+    const exportUserLogs = () => {
+        if (userLogs.length === 0) {
+            toast.error('No logs to export for this user!');
+            return;
+        }
+
+        const data = userLogs.map(log => ({
+            'Timestamp': log.timestamp?.toDate?.()?.toLocaleString() || 'N/A',
+            'Action': log.action || 'N/A',
+            'Entity Type': log.entityType || 'N/A',
+            'Details': JSON.stringify(log.metadata || {}),
+            'IP Address': log.ipAddress || 'N/A'
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'User Logs');
+
+        const filename = `user_logs_${selectedUser?.name?.replace(/\s+/g, '_')}_${Date.now()}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        toast.success(`Exported ${data.length} logs for ${selectedUser?.name}!`);
     };
 
     const getFilteredUsers = () => {
@@ -274,7 +381,15 @@ const UserManagement = () => {
                         </div>
                         <div style={{ fontSize: '2rem', fontWeight: '700' }}>{users.length}</div>
                         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 'var(--spacing-xs)' }}>
-                            Org Admins & Employees
+                            All Roles
+                        </div>
+                    </div>
+                    <div className="card-glass">
+                        <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
+                            Platform Admins
+                        </div>
+                        <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--danger)' }}>
+                            {users.filter(u => u.role === 'PLATFORM_ADMIN').length}
                         </div>
                     </div>
                     <div className="card-glass">
@@ -291,6 +406,14 @@ const UserManagement = () => {
                         </div>
                         <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--success)' }}>
                             {users.filter(u => u.role === 'EMPLOYEE').length}
+                        </div>
+                    </div>
+                    <div className="card-glass">
+                        <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: 'var(--spacing-xs)' }}>
+                            Customers
+                        </div>
+                        <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--info)' }}>
+                            {users.filter(u => u.role === 'CUSTOMER').length}
                         </div>
                     </div>
                     <div className="card-glass">
@@ -314,8 +437,10 @@ const UserManagement = () => {
                                 onChange={(e) => setFilters({ ...filters, role: e.target.value })}
                             >
                                 <option value="">All Roles</option>
+                                <option value="PLATFORM_ADMIN">Platform Admin</option>
                                 <option value="ORG_ADMIN">Org Admin</option>
                                 <option value="EMPLOYEE">Employee</option>
+                                <option value="CUSTOMER">Customer</option>
                             </select>
                         </div>
 
@@ -420,12 +545,21 @@ const UserManagement = () => {
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--spacing-lg)' }}>
                                 <h2>User Activity Logs - {selectedUser?.name}</h2>
-                                <button
-                                    onClick={() => setShowLogsModal(false)}
-                                    className="btn-secondary"
-                                >
-                                    ✕ Close
-                                </button>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button
+                                        onClick={exportUserLogs}
+                                        className="btn-primary"
+                                        disabled={userLogs.length === 0}
+                                    >
+                                        📥 Export to Excel
+                                    </button>
+                                    <button
+                                        onClick={() => setShowLogsModal(false)}
+                                        className="btn-secondary"
+                                    >
+                                        ✕ Close
+                                    </button>
+                                </div>
                             </div>
 
                             {userLogs.length === 0 ? (

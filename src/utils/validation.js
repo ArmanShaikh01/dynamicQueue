@@ -147,6 +147,54 @@ export const validatePhone = (phone, required = false) => {
     return null;
 };
 
+// Contact number validation (supports both mobile and landline)
+export const validateContactNumber = (contactNumber, required = false) => {
+    if (!contactNumber || !contactNumber.trim()) {
+        return required ? 'Contact number is required' : null;
+    }
+
+    const trimmed = contactNumber.trim();
+
+    // Check if it's a mobile number (starts with +)
+    if (trimmed.startsWith('+')) {
+        const phoneWithoutCountryCode = trimmed.replace(/^\+\d+\s*/, '');
+        const cleanPhone = phoneWithoutCountryCode.replace(/[\s-]/g, '');
+
+        if (!/^\d{10}$/.test(cleanPhone)) {
+            return 'Mobile number must be exactly 10 digits';
+        }
+        return null;
+    }
+
+    // Otherwise, it's a landline number
+    // Format: STD-Number or just Number
+    // STD: 2-5 digits, Number: 6-8 digits
+    const parts = trimmed.split('-');
+
+    if (parts.length === 1) {
+        // No STD code, just landline number
+        const cleanNumber = parts[0].replace(/\s/g, '');
+        if (!/^\d{6,8}$/.test(cleanNumber)) {
+            return 'Landline number must be 6-8 digits';
+        }
+    } else if (parts.length === 2) {
+        // STD code + landline number
+        const stdCode = parts[0].replace(/\s/g, '');
+        const number = parts[1].replace(/\s/g, '');
+
+        if (!/^\d{2,5}$/.test(stdCode)) {
+            return 'STD code must be 2-5 digits';
+        }
+        if (!/^\d{6,8}$/.test(number)) {
+            return 'Landline number must be 6-8 digits';
+        }
+    } else {
+        return 'Invalid contact number format';
+    }
+
+    return null;
+};
+
 // Time range validation
 export const validateTimeRange = (startTime, endTime) => {
     if (!startTime) {
@@ -347,6 +395,7 @@ export default {
     validateRequired,
     validateNumeric,
     validatePhone,
+    validateContactNumber,
     validateTimeRange,
     validateFutureDate,
     validateOrganizationName,

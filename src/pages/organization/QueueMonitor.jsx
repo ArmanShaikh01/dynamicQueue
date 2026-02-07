@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { PERMISSION_CODES } from '../../models/permissions';
 import PermissionGuard from '../../components/admin/PermissionGuard';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
+import { skipFromQueue, prioritizeInQueue, markNoShow } from '../../utils/queueManager';
 
 const QueueMonitor = () => {
     const { userProfile } = useAuth();
@@ -162,7 +163,8 @@ const QueueMonitor = () => {
                 toast.error('Queue not found for this service');
                 return;
             }
-            const result = await markNoShow(queueId, appointmentId);
+            // Pass user permissions for backend validation
+            const result = await markNoShow(queueId, appointmentId, userProfile?.permissions);
             if (result.success) {
                 toast.success('Marked as no-show');
             } else {
@@ -355,14 +357,18 @@ const QueueMonitor = () => {
                                                         >
                                                             ⏭️ Skip
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleMarkNoShowClick(appointment.id)}
-                                                            className="btn-danger"
-                                                            style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontSize: '0.875rem' }}
-                                                        >
-                                                            ❌ No-Show
-                                                        </button>
                                                     </div>
+                                                </PermissionGuard>
+
+                                                {/* No-Show Action - Employee Only */}
+                                                <PermissionGuard permission={PERMISSION_CODES.HANDLE_NO_SHOW}>
+                                                    <button
+                                                        onClick={() => handleMarkNoShowClick(appointment.id)}
+                                                        className="btn-danger"
+                                                        style={{ padding: 'var(--spacing-sm) var(--spacing-md)', fontSize: '0.875rem' }}
+                                                    >
+                                                        ❌ No-Show
+                                                    </button>
                                                 </PermissionGuard>
                                             </div>
                                         </div>

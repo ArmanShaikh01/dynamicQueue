@@ -105,7 +105,8 @@ const QueueControl = () => {
     };
 
     const handleMarkNoShow = async (queueId, appointmentId) => {
-        const result = await markNoShow(queueId, appointmentId);
+        // Pass user permissions for backend validation
+        const result = await markNoShow(queueId, appointmentId, userProfile?.permissions);
         if (result.success) {
             toast.success('Marked as no-show');
         } else {

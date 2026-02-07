@@ -5,7 +5,7 @@ import {
     signOut,
     onAuthStateChanged
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
 import { getPermissionsForRole } from '../utils/permissions';
 
@@ -17,6 +17,7 @@ export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [organizationStatus, setOrganizationStatus] = useState(null);
 
 
     // Fetch user profile from Firestore
@@ -97,6 +98,12 @@ export const AuthProvider = ({ children }) => {
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const profile = await fetchUserProfile(userCredential.user.uid);
+
+            // Update lastLogin timestamp
+            await updateDoc(doc(db, 'users', userCredential.user.uid), {
+                lastLogin: serverTimestamp()
+            });
+
             setUserProfile(profile);
             return { success: true, user: userCredential.user, profile };
         } catch (error) {
@@ -147,9 +154,37 @@ export const AuthProvider = ({ children }) => {
         return unsubscribe;
     }, []);
 
+    // Load organization status when userProfile changes (REAL-TIME)
+    useEffect(() => {
+        if (!userProfile?.organizationId) {
+            setOrganizationStatus(null);
+            return;
+        }
+
+        // Real-time listener for organization status changes
+        const unsubscribe = onSnapshot(
+            doc(db, 'organizations', userProfile.organizationId),
+            (docSnapshot) => {
+                if (docSnapshot.exists()) {
+                    const orgData = docSnapshot.data();
+                    setOrganizationStatus(orgData.status || 'APPROVED');
+                } else {
+                    setOrganizationStatus('PENDING');
+                }
+            },
+            (error) => {
+                console.error('Error loading organization status:', error);
+                setOrganizationStatus('PENDING');
+            }
+        );
+
+        return () => unsubscribe();
+    }, [userProfile?.organizationId]);
+
     const value = {
         currentUser,
         userProfile,
+        organizationStatus,
         signup,
         login,
         logout,

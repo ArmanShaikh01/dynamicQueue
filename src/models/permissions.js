@@ -149,6 +149,13 @@ export const PERMISSIONS = {
         category: PERMISSION_CATEGORIES.QUEUE,
         scope: 'ORGANIZATION'
     },
+    HANDLE_NO_SHOW: {
+        code: 'HANDLE_NO_SHOW',
+        name: 'Handle No-Show',
+        description: 'Mark appointments as no-show (Employee only)',
+        category: PERMISSION_CATEGORIES.QUEUE,
+        scope: 'ORGANIZATION'
+    },
     VIEW_QUEUE: {
         code: 'VIEW_QUEUE',
         name: 'View Queue',
@@ -196,6 +203,7 @@ export const DEFAULT_ROLES = {
             'ORG_MANAGE_NO_SHOW',
             'VIEW_QUEUE',
             'VIEW_APPOINTMENTS'
+            // Note: HANDLE_NO_SHOW is intentionally excluded - only employees can mark no-show
         ],
         scope: 'ORGANIZATION',
         isSystem: true
@@ -208,6 +216,7 @@ export const DEFAULT_ROLES = {
             'CALL_NEXT_TOKEN',
             'MARK_COMPLETED',
             'MARK_NO_SHOW',
+            'HANDLE_NO_SHOW',
             'VIEW_APPOINTMENTS',
             'ORG_OVERRIDE_QUEUE'
         ],
@@ -223,6 +232,7 @@ export const DEFAULT_ROLES = {
             'CALL_NEXT_TOKEN',
             'MARK_COMPLETED',
             'MARK_NO_SHOW',
+            'HANDLE_NO_SHOW',
             'VIEW_APPOINTMENTS'
         ],
         scope: 'ORGANIZATION',

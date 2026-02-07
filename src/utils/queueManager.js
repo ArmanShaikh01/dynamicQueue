@@ -163,12 +163,22 @@ export const markCompleted = async (queueId, appointmentId) => {
 
 /**
  * Mark as no-show
+ * @param {string} queueId - The queue ID
+ * @param {string} appointmentId - The appointment ID
+ * @param {Array} userPermissions - User's permissions array (optional, for backend validation)
  */
-/**
- * Mark as no-show
- */
-export const markNoShow = async (queueId, appointmentId) => {
+export const markNoShow = async (queueId, appointmentId, userPermissions = null) => {
     try {
+        // Backend permission check (if permissions are provided)
+        if (userPermissions && Array.isArray(userPermissions)) {
+            if (!userPermissions.includes('HANDLE_NO_SHOW')) {
+                return {
+                    success: false,
+                    error: 'Unauthorized: You do not have permission to mark no-show. This action is restricted to employees only.'
+                };
+            }
+        }
+
         const appointmentDoc = await getDoc(doc(db, 'appointments', appointmentId));
         if (!appointmentDoc.exists()) {
             return { success: false, error: 'Appointment not found' };

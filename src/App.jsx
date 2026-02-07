@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
@@ -15,6 +15,7 @@ import Unauthorized from './pages/Unauthorized';
 
 // Admin pages
 import PlatformDashboard from './pages/admin/PlatformDashboard';
+import PlatformAdminPanel from './pages/admin/PlatformAdminPanel';
 import RoleManagement from './pages/admin/RoleManagement';
 import SystemSettings from './pages/admin/SystemSettings';
 import AuditLogs from './pages/admin/AuditLogs';
@@ -28,6 +29,8 @@ import EmployeeManagement from './pages/organization/EmployeeManagement';
 import OrganizationAnalytics from './pages/organization/OrganizationAnalytics';
 import QueueMonitor from './pages/organization/QueueMonitor';
 import NoShowManagement from './pages/organization/NoShowManagement';
+import OrgAnalyticsDashboard from './pages/orgAdmin/OrgAnalyticsDashboard';
+import OrgAuditLogs from './pages/orgAdmin/OrgAuditLogs';
 
 // Customer pages
 import OrganizationSearch from './pages/customer/OrganizationSearch';
@@ -38,12 +41,49 @@ import MyAppointments from './pages/customer/MyAppointments';
 import QueueControl from './pages/operator/QueueControl';
 import QRScanner from './pages/operator/QRScanner';
 
+// Organization wrapper for approval check
+import OrganizationWrapper from './components/organization/OrganizationWrapper';
+import ApprovalPending from './components/organization/ApprovalPending';
+import AccessDenied from './components/organization/AccessDenied';
+
 function AppContent() {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile, organizationStatus } = useAuth();
+  const location = useLocation();
+
+  // For ORG_ADMIN users, check organization approval status
+  // ONLY block organization-specific routes, allow home page and public routes
+  const isOrganizationRoute = location.pathname.startsWith('/organization') ||
+    location.pathname.startsWith('/org-admin');
+
+  if (currentUser && userProfile?.role === 'ORG_ADMIN' && isOrganizationRoute) {
+    if (organizationStatus === 'PENDING') {
+      return (
+        <div className="app">
+          <ApprovalPending />
+        </div>
+      );
+    }
+
+    if (organizationStatus === 'REJECTED') {
+      return (
+        <div className="app">
+          <AccessDenied />
+        </div>
+      );
+    }
+  }
 
   return (
     <div className="app">
-      {currentUser ? <Navbar /> : <PublicNavbar />}
+      {/* Only show navbar if:
+          1. User is not ORG_ADMIN, OR
+          2. User is ORG_ADMIN with APPROVED organization
+      */}
+      {currentUser && !(userProfile?.role === 'ORG_ADMIN' && organizationStatus !== 'APPROVED') ? (
+        <Navbar />
+      ) : (
+        <PublicNavbar />
+      )}
 
       <Routes>
         {/* Public routes */}
@@ -53,6 +93,14 @@ function AppContent() {
         <Route path="/unauthorized" element={<Unauthorized />} />
 
         {/* Platform Admin routes */}
+        <Route
+          path="/admin/platform"
+          element={
+            <ProtectedRoute allowedRoles={['PLATFORM_ADMIN']}>
+              <PlatformAdminPanel />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin/dashboard"
           element={
@@ -107,7 +155,9 @@ function AppContent() {
           path="/organization/dashboard"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <OrganizationDashboard />
+              <OrganizationWrapper>
+                <OrganizationDashboard />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />
@@ -115,7 +165,9 @@ function AppContent() {
           path="/organization/services"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <ServiceManagement />
+              <OrganizationWrapper>
+                <ServiceManagement />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />
@@ -123,7 +175,9 @@ function AppContent() {
           path="/organization/employees"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <EmployeeManagement />
+              <OrganizationWrapper>
+                <EmployeeManagement />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />
@@ -131,7 +185,9 @@ function AppContent() {
           path="/organization/analytics"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <OrganizationAnalytics />
+              <OrganizationWrapper>
+                <OrganizationAnalytics />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />
@@ -139,7 +195,9 @@ function AppContent() {
           path="/organization/queue-monitor"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <QueueMonitor />
+              <OrganizationWrapper>
+                <QueueMonitor />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />
@@ -147,7 +205,29 @@ function AppContent() {
           path="/organization/no-show"
           element={
             <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
-              <NoShowManagement />
+              <OrganizationWrapper>
+                <NoShowManagement />
+              </OrganizationWrapper>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/org-admin/analytics"
+          element={
+            <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
+              <OrganizationWrapper>
+                <OrgAnalyticsDashboard />
+              </OrganizationWrapper>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/org-admin/audit-logs"
+          element={
+            <ProtectedRoute allowedRoles={['ORG_ADMIN']}>
+              <OrganizationWrapper>
+                <OrgAuditLogs />
+              </OrganizationWrapper>
             </ProtectedRoute>
           }
         />

@@ -4,10 +4,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import toast from 'react-hot-toast';
-import { validateOrganizationName, validateEmail, validatePhone, validateAddress } from '../../utils/validation';
+import { validateOrganizationName, validateEmail, validateContactNumber, validateAddress } from '../../utils/validation';
 import { getFirebaseErrorMessage } from '../../utils/firebaseErrorMapper';
 import FormError from '../../components/common/FormError';
-import PhoneInput from '../../components/common/PhoneInput';
+import ContactNumberInput from '../../components/common/ContactNumberInput';
 
 const OrganizationSetup = () => {
     const { currentUser, userProfile } = useAuth();
@@ -49,7 +49,7 @@ const OrganizationSetup = () => {
                 error = validateEmail(formData.email);
                 break;
             case 'phone':
-                error = validatePhone(formData.phone, true);
+                error = validateContactNumber(formData.phone, true);
                 break;
             case 'address':
                 error = validateAddress(formData.address);
@@ -69,7 +69,7 @@ const OrganizationSetup = () => {
         // Validate all fields
         const nameError = validateOrganizationName(formData.name);
         const emailError = validateEmail(formData.email);
-        const phoneError = validatePhone(formData.phone, true);
+        const phoneError = validateContactNumber(formData.phone, true);
         const addressError = validateAddress(formData.address);
 
         if (nameError || emailError || phoneError || addressError) {
@@ -96,7 +96,8 @@ const OrganizationSetup = () => {
                     phone: formData.phone.trim(),
                     address: formData.address.trim()
                 },
-                isApproved: false, // Requires platform admin approval
+                status: 'PENDING', // Requires platform admin approval
+                isApproved: false, // Legacy field for backward compatibility
                 isActive: true,
                 adminId: currentUser.uid,
                 createdAt: serverTimestamp(),
@@ -197,14 +198,14 @@ const OrganizationSetup = () => {
                             <FormError error={errors.email} />
                         </div>
 
-                        <PhoneInput
+                        <ContactNumberInput
                             id="phone"
                             value={formData.phone}
                             onChange={handleChange}
                             onBlur={() => handleBlur('phone')}
                             error={errors.phone}
                             required={true}
-                            label="Phone"
+                            label="Contact Number"
                         />
 
                         <div className="form-group">
